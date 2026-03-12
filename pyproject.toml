@@ -26,25 +26,8 @@ classifiers = [
 analysis = ["numpy>=1.21", "matplotlib>=3.5"]
 
 [tool.scikit-build]
-# Point scikit-build-core at our CMakeLists.txt (project root)
 cmake.build-type = "Release"
-# Extra CMake args forwarded on every build
+# Disable GUI so OpenGL is not required
 cmake.args = ["-DMEDYAN_NO_GUI=true"]
-# The compiled extension ends up in the `medyan/` sub-package
+# The compiled .so lands inside the medyan/ sub-package
 wheel.packages = ["medyan"]
-
-# ── vcpkg integration ─────────────────────────────────────────────────────────
-# scikit-build-core will pass CMAKE_TOOLCHAIN_FILE automatically when
-# SKBUILD_CMAKE_ARGS includes the vcpkg toolchain, OR you can set
-# VCPKG_ROOT in the environment.  The [tool.scikit-build.cmake.define]
-# section below is the recommended approach for CI/CD.
-#
-# For local development: set VCPKG_ROOT env var before running pip install.
-# Example:
-#   export VCPKG_ROOT=~/.vcpkg
-#   pip install .
-
-[tool.scikit-build.cmake.define]
-# If VCPKG_ROOT is set in the environment, this picks it up automatically.
-# Otherwise you can hard-code it here:
-# CMAKE_TOOLCHAIN_FILE = "/path/to/vcpkg/scripts/buildsystems/vcpkg.cmake"

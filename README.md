@@ -6,57 +6,50 @@
 Python wrapper for **MEDYAN** (Mechanochemical Dynamics of Active Networks),
 a simulation package for cytoskeletal filament network dynamics.
 
-> The C++ backend is compiled during `pip install` — no separate build step
-> is needed.
+The C++ backend is compiled automatically during `pip install` — **no
+separate build step is needed**.  vcpkg and all C++ dependencies are
+downloaded and compiled on first install.
 
 ---
 
 ## Requirements
 
-| Tool | Version |
-|------|---------|
-| Python | ≥ 3.9 |
-| CMake | ≥ 3.15 |
+| Tool | Minimum version |
+|------|----------------|
+| Python | 3.9 |
+| CMake  | 3.15 |
 | C++ compiler | GCC ≥ 7 / Clang ≥ 5 / MSVC 2017+ |
-| git | ≥ 2.7 (for vcpkg bootstrap) |
+| git | 2.7 (used to bootstrap vcpkg) |
 
 ---
 
 ## Installation
 
-### Option A — Automatic (recommended)
-
-The helper script clones vcpkg, installs all C++ dependencies, and runs
-`pip install` in one step:
+### From GitHub (recommended)
 
 ```bash
-chmod +x install_deps.sh
-./install_deps.sh
+pip install git+https://github.com/john-wang1015/medyan_python_wrapper.git
 ```
 
-For an **editable / development** install:
+That's it. CMake will automatically clone and bootstrap vcpkg, then
+compile all C++ dependencies.  First install takes ~10–20 minutes
+depending on your machine; subsequent installs reuse the cached build.
 
-```bash
-./install_deps.sh --editable
-```
+### Faster installs with a pre-existing vcpkg
 
-### Option B — Manual (if you already have vcpkg)
+If you already have vcpkg, point to it and the first-install step is skipped:
 
 ```bash
 export VCPKG_ROOT=/path/to/vcpkg
-export CMAKE_TOOLCHAIN_FILE="${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
-
-pip install . \
-    -C cmake.define.CMAKE_TOOLCHAIN_FILE="${CMAKE_TOOLCHAIN_FILE}" \
-    -C cmake.define.MEDYAN_NO_GUI=true
+pip install git+https://github.com/john-wang1015/medyan_python_wrapper.git
 ```
 
-### Option C — Install directly from GitHub
+### Local (clone + install)
 
 ```bash
-VCPKG_ROOT=~/.vcpkg pip install git+https://github.com/<your-org>/medyan-python.git \
-    -C cmake.define.CMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" \
-    -C cmake.define.MEDYAN_NO_GUI=true
+git clone https://github.com/john-wang1015/medyan_python_wrapper.git
+cd medyan-python
+pip install .
 ```
 
 ---
@@ -66,11 +59,10 @@ VCPKG_ROOT=~/.vcpkg pip install git+https://github.com/<your-org>/medyan-python.
 ```python
 import medyan
 
-# Run a simulation from a MEDYAN system input file
 result = medyan.run_simulation(
-    input_file = "medyan_src/examples/actin_only/systeminput.txt",
+    input_file = medyan.get_examples_dir() / "actin_only/systeminput.txt",
     output_dir = "/tmp/medyan_out",
-    runtime    = 100.0,   # override RUNTIME in the input file (optional)
+    runtime    = 100.0,   # override RUNTIME (optional)
     seed       = 42,      # reproducible run (optional)
 )
 
@@ -78,88 +70,76 @@ print(f"Filaments : {result['num_filaments']}")
 print(f"Cylinders : {result['num_cylinders']}")
 print(f"Beads     : {result['num_beads']}")
 
-# Bead coordinates for each filament
-for i, fil in enumerate(result["filament_coords"]):
-    print(f"Filament {i}: {len(fil)} beads, first bead = {fil[0]}")
+# (x, y, z) of every bead in filament 0
+for bead in result["filament_coords"][0]:
+    print(bead)
 ```
 
 ---
 
-## API Reference
+## API
 
 ### `medyan.run_simulation(...)`
 
 ```python
 medyan.run_simulation(
     input_file:  str | Path,
-    input_dir:   str | Path | None = None,
-    output_dir:  str | Path | None = None,
+    input_dir:   str | Path | None = None,  # default: dir of input_file
+    output_dir:  str | Path | None = None,  # default: cwd
     *,
-    runtime:     float | None = None,
+    runtime:     float | None = None,       # overrides RUNTIME in file
     seed:        int   | None = None,
     num_threads: int          = -1,
 ) -> dict
 ```
 
+Return dict keys:
+
 | Key | Type | Description |
 |-----|------|-------------|
-| `"num_filaments"` | `int` | Number of filaments at end of run |
+| `"num_filaments"` | `int` | Filaments at end of simulation |
 | `"num_cylinders"` | `int` | Total cylinders |
 | `"num_beads"` | `int` | Total beads |
-| `"filament_coords"` | `list[list[tuple]]` | `[filament][bead] → (x, y, z)` in nm |
-
----
+| `"filament_coords"` | `list[list[tuple]]` | `[filament][bead] → (x, y, z)` nm |
 
 ### `medyan.read_trajectory(snapshot_file)`
 
-Pure-Python parser for MEDYAN's `snapshot.traj` output file.
+Pure-Python parser for MEDYAN's `snapshot.traj` output:
 
 ```python
 frames = medyan.read_trajectory("/tmp/medyan_out/snapshot.traj")
-# frames[0]["time"]                → float (simulation time)
-# frames[0]["filaments"][i]["beads"] → list of (x,y,z) tuples
+print(frames[0]["time"])                          # float
+print(frames[0]["filaments"][0]["beads"][0])      # (x, y, z)
 ```
-
----
 
 ### `medyan.get_examples_dir()`
 
-Returns the path to the bundled example input files:
-
-```python
-import medyan
-ex = medyan.get_examples_dir()
-result = medyan.run_simulation(ex / "actin_only" / "systeminput.txt",
-                               output_dir="/tmp/test")
-```
+Returns a `Path` to the bundled example input files.
 
 ---
 
 ## Example Input Files
 
-The following examples from MEDYAN are included under `medyan_src/examples/`:
+Included under `medyan_src/examples/`:
 
 | Directory | Description |
 |-----------|-------------|
 | `actin_only/` | Pure actin polymerisation |
 | `2filaments/` | Two-filament mechanical test |
 | `50filaments_motor_linker/` | Motors + crosslinkers |
-| `branch_actin/` | Branched actin with Arp2/3 |
+| `branch_actin/` | Branched actin (Arp2/3) |
 | `nucleation_actin/` | Actin nucleation |
 
 ---
 
 ## Notes
 
-* GUI features are **disabled** in this package (no OpenGL dependency).
-* All length units are **nanometres (nm)**; time units are **seconds (s)**;
-  force units are **picoNewtons (pN)**.
-* The C++ compilation downloads and builds ~8 vcpkg packages
-  (~500 MB, one-time only).
+- GUI is **disabled** in this package (no OpenGL required).
+- Units: length = **nm**, time = **s**, force = **pN**.
+- First install compiles ~8 vcpkg packages (~500 MB, cached after that).
 
 ---
 
 ## License
 
-MEDYAN is © 2015–2024 Papoian Lab, University of Maryland.
-See `license.txt` for details.
+MEDYAN © 2015–2024 Papoian Lab, University of Maryland.  See `license.txt`.
