@@ -1,14 +1,16 @@
 cmake_minimum_required(VERSION 3.15)
 
+#######################################
 # Auto-detect conda environment
+# Must be done BEFORE project() so find_package works correctly
+#######################################
 if(DEFINED ENV{CONDA_PREFIX})
     message(STATUS "Conda environment detected: $ENV{CONDA_PREFIX}")
     list(PREPEND CMAKE_PREFIX_PATH "$ENV{CONDA_PREFIX}")
+    # Add include/lib directly - needed for header-only packages without CMake config
+    include_directories("$ENV{CONDA_PREFIX}/include")
+    link_directories("$ENV{CONDA_PREFIX}/lib")
 endif()
-
-#######################################
-# Configurations
-#######################################
 
 project(medyan VERSION 5.4.0)
 
@@ -19,18 +21,15 @@ project(medyan VERSION 5.4.0)
 set(src_dir          "src")
 set(src_dir_external "external")
 
-# List sources
 file(GLOB_RECURSE src_list LIST_DIRECTORIES true CONFIGURE_DEPENDS "${src_dir}/*.cpp")
 
 #######################################
 # Compiling configs
 #######################################
 
-# C++ standard
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
-# Compiler flags
 if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
 endif()
@@ -43,13 +42,10 @@ else()
     set(CMAKE_CXX_FLAGS_RELEASE "-O2 -funroll-loops")
 endif()
 
-# Add the executable
 add_executable(medyan ${src_list})
 
-# Source groups for IDEs
 source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES ${src_list})
 
-# Include paths
 target_include_directories(medyan PUBLIC
     ${src_dir}
     ${src_dir}/Chemistry
@@ -68,7 +64,6 @@ target_include_directories(medyan PUBLIC
     ${src_dir_external}
 )
 
-# Preprocessor macros
 target_compile_definitions(medyan PRIVATE
     GIT_COMMIT_HASH="5.4.0-release"
     GIT_BRANCH="main"
@@ -79,22 +74,17 @@ target_compile_definitions(medyan PRIVATE
     TRACK_UPPER_COPY_N
 
     MOVEBEADSLINESEARCH
-
     SIMDBINDINGSEARCH
 
     BOOST_MEM_POOL
     BOOL_POOL_NSIZE=65536
 
     CHECKFORCES_INF_NAN
-
-    # Always disable GUI for the Python package build
     NO_GUI
 )
 
 if(MSVC)
-    target_compile_definitions(medyan PRIVATE
-        _USE_MATH_DEFINES
-    )
+    target_compile_definitions(medyan PRIVATE _USE_MATH_DEFINES)
 endif()
 
 # Threads
@@ -102,7 +92,6 @@ if(NOT MSVC)
     set(THREADS_PREFER_PTHREAD_FLAG ON)
     find_package(Threads REQUIRED)
     target_link_libraries(medyan PRIVATE Threads::Threads)
-
     if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
         target_link_libraries(medyan PRIVATE stdc++fs)
     endif()
@@ -112,7 +101,7 @@ endif()
 # External dependencies
 #######################################
 
-# boost
+# Boost — try config mode first (conda), fall back to legacy FindBoost
 find_package(Boost CONFIG QUIET)
 if(NOT Boost_FOUND)
     cmake_policy(SET CMP0167 OLD)
@@ -120,11 +109,11 @@ if(NOT Boost_FOUND)
 endif()
 target_link_libraries(medyan PRIVATE Boost::boost)
 
-# catch2
+# Catch2
 find_package(Catch2 CONFIG REQUIRED)
 target_link_libraries(medyan PRIVATE Catch2::Catch2)
 
-# eigen3
+# Eigen3
 find_package(Eigen3 CONFIG REQUIRED)
 target_link_libraries(medyan PRIVATE Eigen3::Eigen)
 
@@ -132,21 +121,28 @@ target_link_libraries(medyan PRIVATE Eigen3::Eigen)
 find_package(fmt CONFIG REQUIRED)
 target_link_libraries(medyan PRIVATE fmt::fmt)
 
-# highfive (HDF5 C++ wrapper)
-# conda-forge provides the target HighFive::HighFive; vcpkg uses libdeps + HighFive.
+# HighFive (HDF5 C++ wrapper)
 find_package(HighFive CONFIG REQUIRED)
 if(TARGET HighFive::HighFive)
     target_link_libraries(medyan PRIVATE HighFive::HighFive)
 elseif(TARGET HighFive)
-    # vcpkg-style targets
-    target_link_libraries(medyan PRIVATE libdeps HighFive HighFive_libdeps HighFive_HighFive)
+    target_link_libraries(medyan PRIVATE HighFive)
 else()
     message(FATAL_ERROR "HighFive found but no known CMake target available.")
 endif()
 
-# spectra
-find_package(spectra CONFIG REQUIRED)
-target_link_libraries(medyan PRIVATE Spectra::Spectra)
+# Spectra — header-only library, conda-forge does NOT ship a CMake config file.
+# The include_directories() above already adds $CONDA_PREFIX/include.
+# We just verify the headers exist.
+if(DEFINED ENV{CONDA_PREFIX})
+    set(_spectra_inc "$ENV{CONDA_PREFIX}/include")
+else()
+    find_path(_spectra_inc "Spectra/SymEigsSolver.h")
+endif()
+if(NOT EXISTS "${_spectra_inc}/Spectra/SymEigsSolver.h")
+    message(FATAL_ERROR "Spectra headers not found. Run: conda install -c conda-forge spectra")
+endif()
+message(STATUS "Found Spectra headers: ${_spectra_inc}/Spectra")
 
 # spdlog
 find_package(spdlog CONFIG REQUIRED)
@@ -157,11 +153,9 @@ find_package(xtensor CONFIG REQUIRED)
 target_link_libraries(medyan PRIVATE xtensor xtensor::optimize)
 
 #######################################
-# Install rules (used by scikit-build-core)
+# Install
 #######################################
 
-# Install the medyan executable into the Python package's bin/ directory.
-# scikit-build-core will place it relative to the package root.
 install(TARGETS medyan
     RUNTIME DESTINATION medyan/bin
 )
