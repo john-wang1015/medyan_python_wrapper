@@ -1,105 +1,141 @@
- (cd "$(git rev-parse --show-toplevel)" && git apply --3way <<'EOF' 
-diff --git a/README.md b/README.md
-index d8742e0429b570157c8b5210a3cd40ff4d141d6d..55eba35810c9a909b2a244a43066de469cb0f5b8 100644
---- a/README.md
-+++ b/README.md
-@@ -13,67 +13,96 @@ downloaded and compiled on first install.
- ---
- 
- ## Requirements
- 
- | Tool | Minimum version |
- |------|----------------|
- | Python | 3.9 |
- | CMake  | 3.15 |
- | C++ compiler | GCC ≥ 7 / Clang ≥ 5 / MSVC 2017+ |
- | git | 2.7 (used to bootstrap vcpkg) |
- 
- ---
- 
- ## Installation
- 
- ### From GitHub (recommended)
- 
- ```bash
- pip install git+https://github.com/john-wang1015/medyan_python_wrapper.git
- ```
- 
- That's it. CMake will automatically clone and bootstrap vcpkg, then
- compile all C++ dependencies.  First install takes ~10–20 minutes
- depending on your machine; subsequent installs reuse the cached build.
- 
-+### macOS (Apple Silicon) note
-+
-+If you hit a `boost-thread:arm64-osx` build failure during `pip install`, remove the previous build cache and retry so a fresh (current) vcpkg checkout is used:
-+
-+```bash
-+rm -rf build/ _skbuild/
-+pip install --no-cache-dir .
-+```
-+
-+You can also point to your own up-to-date vcpkg checkout via `VCPKG_ROOT`.
-+
- ### Faster installs with a pre-existing vcpkg
- 
- If you already have vcpkg, point to it and the first-install step is skipped:
- 
- ```bash
- export VCPKG_ROOT=/path/to/vcpkg
- pip install git+https://github.com/john-wang1015/medyan_python_wrapper.git
- ```
- 
- ### Local (clone + install)
- 
- ```bash
- git clone https://github.com/john-wang1015/medyan_python_wrapper.git
- cd medyan-python
- pip install .
- ```
- 
-+---
-+### Conda environment (recommended setup)
-+
-+When building inside a conda env, install build tools first and force a clean build:
-+
-+```bash
-+conda install -c conda-forge cmake ninja compilers pkg-config
-+rm -rf build/ _skbuild/
-+pip install --no-cache-dir .
-+```
-+
-+If you already have a working vcpkg checkout, reuse it:
-+
-+```bash
-+export VCPKG_ROOT=/path/to/vcpkg
-+pip install --no-cache-dir .
-+```
-+
- ---
- 
- ## Quick Start
- 
- ```python
- import medyan
- 
- result = medyan.run_simulation(
-     input_file = medyan.get_examples_dir() / "actin_only/systeminput.txt",
-     output_dir = "/tmp/medyan_out",
-     runtime    = 100.0,   # override RUNTIME (optional)
-     seed       = 42,      # reproducible run (optional)
- )
- 
- print(f"Filaments : {result['num_filaments']}")
- print(f"Cylinders : {result['num_cylinders']}")
- print(f"Beads     : {result['num_beads']}")
- 
- # (x, y, z) of every bead in filament 0
- for bead in result["filament_coords"][0]:
-     print(bead)
- ```
- 
- ---
- 
- 
-EOF
+# medyan — Python bindings for MEDYAN 5.4.0
+
+[![MEDYAN](https://img.shields.io/badge/MEDYAN-5.4.0-blue)](http://medyan.org)
+[![Python](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org)
+
+Python wrapper for **MEDYAN** (Mechanochemical Dynamics of Active Networks),
+a simulation package for cytoskeletal filament network dynamics.
+
+The C++ backend is compiled automatically during `pip install`.
+All dependencies except HDF5 are downloaded automatically by CMake.
+
+---
+
+## Prerequisites
+
+Only **HDF5** needs to be installed on your system before `pip install`:
+
+| Platform | Command |
+|----------|---------|
+| macOS    | `brew install hdf5` |
+| Ubuntu/Debian | `sudo apt install libhdf5-dev` |
+| conda (any) | `conda install -c conda-forge hdf5` |
+| HPC / module | `module load hdf5` |
+
+You also need: **Python ≥ 3.9**, **CMake ≥ 3.15**, and a **C++17 compiler**
+(GCC ≥ 7, Clang ≥ 5, or MSVC 2017+).
+
+All other C++ dependencies (Boost headers, Eigen3, fmt, spdlog, Spectra,
+xtensor, HighFive, pybind11) are fetched automatically during the build.
+
+---
+
+## Installation
+
+```bash
+# 1. Install HDF5 (once)
+brew install hdf5          # macOS
+# sudo apt install libhdf5-dev   # Ubuntu
+
+# 2. Install the Python package
+pip install git+https://github.com/john-wang1015/medyan_python_wrapper.git
+```
+
+First install takes ~5–10 minutes (downloads and compiles deps).
+Subsequent installs reuse scikit-build-core's cache.
+
+### Local install
+
+```bash
+git clone https://github.com/john-wang1015/medyan_python_wrapper.git
+cd medyan_python_wrapper
+pip install .
+```
+
+---
+
+## Quick Start
+
+```python
+import medyan
+
+result = medyan.run_simulation(
+    input_file = medyan.get_examples_dir() / "actin_only/systeminput.txt",
+    output_dir = "/tmp/medyan_out",
+    runtime    = 100.0,   # override RUNTIME in input file (optional)
+    seed       = 42,      # reproducible run (optional)
 )
+
+print(f"Filaments : {result['num_filaments']}")
+print(f"Cylinders : {result['num_cylinders']}")
+print(f"Beads     : {result['num_beads']}")
+
+# (x, y, z) coordinates of every bead in filament 0
+for bead in result["filament_coords"][0]:
+    print(bead)
+```
+
+---
+
+## API
+
+### `medyan.run_simulation(...)`
+
+```python
+medyan.run_simulation(
+    input_file:  str | Path,
+    input_dir:   str | Path | None = None,  # default: dir of input_file
+    output_dir:  str | Path | None = None,  # default: cwd
+    *,
+    runtime:     float | None = None,       # overrides RUNTIME in input file
+    seed:        int   | None = None,
+    num_threads: int          = -1,
+) -> dict
+```
+
+| Return key | Type | Description |
+|------------|------|-------------|
+| `"num_filaments"` | `int` | Filaments at end of simulation |
+| `"num_cylinders"` | `int` | Total cylinders |
+| `"num_beads"` | `int` | Total beads |
+| `"filament_coords"` | `list[list[tuple]]` | `[filament][bead] → (x, y, z)` in nm |
+
+### `medyan.read_trajectory(snapshot_file)`
+
+Pure-Python parser for MEDYAN's `snapshot.traj` output:
+
+```python
+frames = medyan.read_trajectory("/tmp/medyan_out/snapshot.traj")
+print(frames[0]["time"])                       # simulation time (float)
+print(frames[0]["filaments"][0]["beads"][0])   # (x, y, z)
+```
+
+### `medyan.get_examples_dir()`
+
+Returns a `Path` to the bundled example input files.
+
+---
+
+## Example Input Files
+
+| Directory | Description |
+|-----------|-------------|
+| `actin_only/` | Pure actin polymerisation |
+| `2filaments/` | Two-filament mechanical test |
+| `50filaments_motor_linker/` | Motors + crosslinkers |
+| `branch_actin/` | Branched actin (Arp2/3) |
+| `nucleation_actin/` | Actin nucleation |
+
+---
+
+## Notes
+
+- GUI is **disabled** — no OpenGL/GLFW required.
+- Units: length = **nm**, time = **s**, force = **pN**.
+- No vcpkg required — deps are fetched by CMake directly from GitHub.
+
+---
+
+## License
+
+MEDYAN © 2015–2024 Papoian Lab, University of Maryland. See `license.txt`.
