@@ -24,11 +24,21 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 include(FetchContent)
 set(FETCHCONTENT_QUIET OFF)
 
+# Helper: populate header-only dep and return its source dir
+macro(fetch_headers _name _var)
+    FetchContent_GetProperties(${_name})
+    string(TOLOWER "${_name}" _name_lc)
+    if(NOT ${_name_lc}_POPULATED)
+        FetchContent_Populate(${_name})
+    endif()
+    set(${_var} "${${_name_lc}_SOURCE_DIR}")
+endmacro()
+
 # ── HDF5 (only true system dependency) ───────────────────────────────────────
 find_package(HDF5 REQUIRED COMPONENTS C HL)
 message(STATUS "[medyan] HDF5 found: ${HDF5_INCLUDE_DIRS}")
 
-# ── pybind11 ─────────────────────────────────────────────────────────────────
+# ── pybind11 (has clean CMakeLists, use MakeAvailable) ───────────────────────
 find_package(pybind11 CONFIG QUIET)
 if(NOT pybind11_FOUND)
     FetchContent_Declare(pybind11
@@ -40,18 +50,7 @@ endif()
 
 find_package(Python REQUIRED COMPONENTS Interpreter Development.Module)
 
-# ── Eigen3 (header-only) ─────────────────────────────────────────────────────
-find_package(Eigen3 3.4 CONFIG QUIET)
-if(NOT Eigen3_FOUND)
-    FetchContent_Declare(eigen3
-        GIT_REPOSITORY https://gitlab.com/libeigen/eigen.git
-        GIT_TAG        3.4.0
-        GIT_SHALLOW    TRUE)
-    FetchContent_MakeAvailable(eigen3)
-    # eigen3's CMakeLists creates Eigen3::Eigen itself — nothing more needed
-endif()
-
-# ── fmt ───────────────────────────────────────────────────────────────────────
+# ── fmt (compiled, clean CMakeLists) ─────────────────────────────────────────
 find_package(fmt CONFIG QUIET)
 if(NOT fmt_FOUND)
     FetchContent_Declare(fmt
@@ -61,7 +60,7 @@ if(NOT fmt_FOUND)
     FetchContent_MakeAvailable(fmt)
 endif()
 
-# ── spdlog ───────────────────────────────────────────────────────────────────
+# ── spdlog (header-only when fmt external) ───────────────────────────────────
 find_package(spdlog CONFIG QUIET)
 if(NOT spdlog_FOUND)
     FetchContent_Declare(spdlog
@@ -72,66 +71,83 @@ if(NOT spdlog_FOUND)
     FetchContent_MakeAvailable(spdlog)
 endif()
 
-# ── Boost headers ─────────────────────────────────────────────────────────────
+# ────────────────────────────────────────────────────────────────────────────
+# Header-only deps: use FetchContent_Populate to download WITHOUT running
+# their CMakeLists (which are all broken in various ways on CMake 4.2).
+# We create minimal INTERFACE IMPORTED targets manually.
+# ────────────────────────────────────────────────────────────────────────────
+
+# ── Eigen3 ───────────────────────────────────────────────────────────────────
+find_package(Eigen3 3.4 CONFIG QUIET)
+if(NOT Eigen3_FOUND)
+    FetchContent_Declare(eigen3
+        GIT_REPOSITORY https://gitlab.com/libeigen/eigen.git
+        GIT_TAG        3.4.0
+        GIT_SHALLOW    TRUE)
+    fetch_headers(eigen3 _eigen_dir)
+    add_library(Eigen3::Eigen INTERFACE IMPORTED GLOBAL)
+    target_include_directories(Eigen3::Eigen INTERFACE "${_eigen_dir}")
+endif()
+
+# ── Boost (header-only tarball — no git clone needed) ────────────────────────
 find_package(Boost 1.74 QUIET)
 if(NOT Boost_FOUND)
-    message(STATUS "[medyan] Downloading Boost 1.84.0 headers...")
+    message(STATUS "[medyan] Downloading Boost 1.84.0 headers (~100 MB)...")
     FetchContent_Declare(boost_headers
         URL      https://archives.boost.io/release/1.84.0/source/boost_1_84_0.tar.bz2
         URL_HASH SHA256=cc4b893acf645c9d4b698e9a0f08ca8846aa5d6c68275c14c3e7949c24109454)
-    FetchContent_MakeAvailable(boost_headers)
+    fetch_headers(boost_headers _boost_dir)
     add_library(Boost::boost INTERFACE IMPORTED GLOBAL)
-    target_include_directories(Boost::boost INTERFACE "${boost_headers_SOURCE_DIR}")
+    target_include_directories(Boost::boost INTERFACE "${_boost_dir}")
 endif()
 
-# ── Spectra (header-only, needs Eigen3) ──────────────────────────────────────
+# ── Spectra ───────────────────────────────────────────────────────────────────
 FetchContent_Declare(spectra
     GIT_REPOSITORY https://github.com/yixuan/spectra.git
     GIT_TAG        v1.0.1
     GIT_SHALLOW    TRUE)
-FetchContent_MakeAvailable(spectra)
-# spectra's CMakeLists creates Spectra::Spectra
+fetch_headers(spectra _spectra_dir)
+add_library(Spectra::Spectra INTERFACE IMPORTED GLOBAL)
+target_include_directories(Spectra::Spectra INTERFACE "${_spectra_dir}/include")
+target_link_libraries(Spectra::Spectra INTERFACE Eigen3::Eigen)
 
-# ── xtl (header-only, required by xtensor) ────────────────────────────────────
+# ── xtl ───────────────────────────────────────────────────────────────────────
 FetchContent_Declare(xtl
     GIT_REPOSITORY https://github.com/xtensor-stack/xtl.git
     GIT_TAG        0.7.7
     GIT_SHALLOW    TRUE)
-FetchContent_MakeAvailable(xtl)
-# xtl's CMakeLists creates xtl target
+fetch_headers(xtl _xtl_dir)
+add_library(xtl INTERFACE IMPORTED GLOBAL)
+target_include_directories(xtl INTERFACE "${_xtl_dir}/include")
 
-# ── xtensor (header-only) ─────────────────────────────────────────────────────
-FetchContent_Declare(xtensor_fetch
+# ── xtensor ───────────────────────────────────────────────────────────────────
+FetchContent_Declare(xtensor
     GIT_REPOSITORY https://github.com/xtensor-stack/xtensor.git
     GIT_TAG        0.25.0
     GIT_SHALLOW    TRUE)
-FetchContent_MakeAvailable(xtensor_fetch)
-# xtensor's CMakeLists creates xtensor target
+fetch_headers(xtensor _xtensor_dir)
+add_library(xtensor INTERFACE IMPORTED GLOBAL)
+target_include_directories(xtensor INTERFACE "${_xtensor_dir}/include")
+target_link_libraries(xtensor INTERFACE xtl)
 
 # ── HighFive (header-only HDF5 C++ wrapper) ───────────────────────────────────
-FetchContent_Declare(HighFive
+# Use GIT_SUBMODULES "" to skip the catch2 submodule — we don't need it.
+FetchContent_Declare(highfive
     GIT_REPOSITORY https://github.com/BlueBrain/HighFive.git
     GIT_TAG        v2.9.0
-    GIT_SHALLOW    TRUE)
-set(HIGHFIVE_USE_BOOST          OFF CACHE BOOL "" FORCE)
-set(HIGHFIVE_USE_EIGEN          OFF CACHE BOOL "" FORCE)
-set(HIGHFIVE_USE_XTENSOR        OFF CACHE BOOL "" FORCE)
-set(HIGHFIVE_BUILD_DOCS         OFF CACHE BOOL "" FORCE)
-set(HIGHFIVE_EXAMPLES           OFF CACHE BOOL "" FORCE)
-set(HIGHFIVE_UNIT_TESTS         OFF CACHE BOOL "" FORCE)
-FetchContent_MakeAvailable(HighFive)
-# HighFive's CMakeLists creates HighFive target
-# Aliases expected by MEDYAN's include paths
-if(NOT TARGET libdeps)
-    add_library(libdeps          INTERFACE IMPORTED GLOBAL)
-endif()
-if(NOT TARGET HighFive_libdeps)
-    add_library(HighFive_libdeps INTERFACE IMPORTED GLOBAL)
-endif()
-if(NOT TARGET HighFive_HighFive)
-    add_library(HighFive_HighFive INTERFACE IMPORTED GLOBAL)
-    target_link_libraries(HighFive_HighFive INTERFACE HighFive)
-endif()
+    GIT_SHALLOW    TRUE
+    GIT_SUBMODULES "")   # <-- skip catch2 submodule
+fetch_headers(highfive _highfive_dir)
+add_library(HighFive INTERFACE IMPORTED GLOBAL)
+target_include_directories(HighFive INTERFACE
+    "${_highfive_dir}/include"
+    ${HDF5_INCLUDE_DIRS})
+target_link_libraries(HighFive INTERFACE ${HDF5_LIBRARIES} ${HDF5_HL_LIBRARIES})
+# Aliases used internally
+add_library(libdeps           INTERFACE IMPORTED GLOBAL)
+add_library(HighFive_libdeps  INTERFACE IMPORTED GLOBAL)
+add_library(HighFive_HighFive INTERFACE IMPORTED GLOBAL)
+target_link_libraries(HighFive_HighFive INTERFACE HighFive)
 
 # ── MEDYAN source files ───────────────────────────────────────────────────────
 set(MEDYAN_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/medyan_src/src")
