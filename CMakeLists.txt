@@ -2,12 +2,11 @@ cmake_minimum_required(VERSION 3.15)
 
 #######################################
 # Auto-detect conda environment
-# Must be done BEFORE project() so find_package works correctly
+# Must be done BEFORE project()
 #######################################
 if(DEFINED ENV{CONDA_PREFIX})
     message(STATUS "Conda environment detected: $ENV{CONDA_PREFIX}")
     list(PREPEND CMAKE_PREFIX_PATH "$ENV{CONDA_PREFIX}")
-    # Add include/lib directly - needed for header-only packages without CMake config
     include_directories("$ENV{CONDA_PREFIX}/include")
     link_directories("$ENV{CONDA_PREFIX}/lib")
 endif()
@@ -101,7 +100,7 @@ endif()
 # External dependencies
 #######################################
 
-# Boost — try config mode first (conda), fall back to legacy FindBoost
+# Boost
 find_package(Boost CONFIG QUIET)
 if(NOT Boost_FOUND)
     cmake_policy(SET CMP0167 OLD)
@@ -121,7 +120,7 @@ target_link_libraries(medyan PRIVATE Eigen3::Eigen)
 find_package(fmt CONFIG REQUIRED)
 target_link_libraries(medyan PRIVATE fmt::fmt)
 
-# HighFive (HDF5 C++ wrapper)
+# HighFive
 find_package(HighFive CONFIG REQUIRED)
 if(TARGET HighFive::HighFive)
     target_link_libraries(medyan PRIVATE HighFive::HighFive)
@@ -131,18 +130,9 @@ else()
     message(FATAL_ERROR "HighFive found but no known CMake target available.")
 endif()
 
-# Spectra — header-only library, conda-forge does NOT ship a CMake config file.
-# The include_directories() above already adds $CONDA_PREFIX/include.
-# We just verify the headers exist.
-if(DEFINED ENV{CONDA_PREFIX})
-    set(_spectra_inc "$ENV{CONDA_PREFIX}/include")
-else()
-    find_path(_spectra_inc "Spectra/SymEigsSolver.h")
-endif()
-if(NOT EXISTS "${_spectra_inc}/Spectra/SymEigsSolver.h")
-    message(FATAL_ERROR "Spectra headers not found. Run: conda install -c conda-forge spectra")
-endif()
-message(STATUS "Found Spectra headers: ${_spectra_inc}/Spectra")
+# Spectra — header-only, no CMake config file on conda-forge.
+# Headers are already available via include_directories($CONDA_PREFIX/include) above.
+# No find_package needed.
 
 # spdlog
 find_package(spdlog CONFIG REQUIRED)
