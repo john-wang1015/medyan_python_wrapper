@@ -107,6 +107,7 @@ file(GLOB_RECURSE MEDYAN_SRCS
 list(FILTER MEDYAN_SRCS EXCLUDE REGEX ".*/MEDYAN\\.cpp$")
 list(FILTER MEDYAN_SRCS EXCLUDE REGEX ".*\\.cu$")
 list(FILTER MEDYAN_SRCS EXCLUDE REGEX ".*CUDAcommon.*")
+list(FILTER MEDYAN_SRCS EXCLUDE REGEX ".*/TESTS/.*")
 
 pybind11_add_module(_core MODULE
     ${MEDYAN_SRCS}
@@ -161,7 +162,6 @@ find_package(HighFive CONFIG REQUIRED)
 find_package(spectra  CONFIG REQUIRED)
 find_package(spdlog   CONFIG REQUIRED)
 find_package(xtensor  CONFIG REQUIRED)
-find_package(Catch2   CONFIG REQUIRED)
 
 target_link_libraries(_core PRIVATE
     Boost::boost Eigen3::Eigen fmt::fmt
@@ -169,7 +169,6 @@ target_link_libraries(_core PRIVATE
     Spectra::Spectra
     spdlog::spdlog spdlog::spdlog_header_only
     xtensor xtensor::optimize
-    Catch2::Catch2
 )
 
 if(NOT MSVC)

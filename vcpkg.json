@@ -8,7 +8,6 @@
     "boost-heap",
     "boost-ublas",
     "boost-range",
-    "catch2",
     "eigen3",
     "fmt",
     "highfive",
