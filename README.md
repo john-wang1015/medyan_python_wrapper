@@ -35,6 +35,18 @@ That's it. CMake will automatically clone and bootstrap vcpkg, then
 compile all C++ dependencies.  First install takes ~10–20 minutes
 depending on your machine; subsequent installs reuse the cached build.
 
+### macOS (Apple Silicon) note
+
+If you hit a `boost-thread:arm64-osx` build failure during `pip install`, remove the previous build cache and retry so a fresh (current) vcpkg checkout is used:
+
+```bash
+rm -rf build/ _skbuild/
+pip install --no-cache-dir .
+```
+
+You can also point to your own up-to-date vcpkg checkout via `VCPKG_ROOT`.
+
+
 ### Faster installs with a pre-existing vcpkg
 
 If you already have vcpkg, point to it and the first-install step is skipped:
