@@ -1,0 +1,20 @@
+{
+  "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg/master/scripts/vcpkg.schema.json",
+  "name": "medyan-python",
+  "version": "5.4.0",
+  "description": "MEDYAN Python bindings dependencies",
+  "dependencies": [
+    "boost-pool",
+    "boost-heap",
+    "boost-ublas",
+    "boost-range",
+    "catch2",
+    "eigen3",
+    "fmt",
+    "highfive",
+    "spdlog",
+    "spectra",
+    "xtensor",
+    "pybind11"
+  ]
+}
