@@ -1,0 +1,27 @@
+name: medyan
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.11
+  - pip
+  # Build tools
+  - cmake>=3.15
+  - ninja
+  - cxx-compiler
+  # C++ libraries required by MEDYAN
+  - boost-cpp
+  - eigen
+  - fmt
+  - spdlog
+  - hdf5
+  - highfive
+  - spectra
+  - xtensor
+  - xtensor-blas
+  - catch2
+  # Optional: useful Python analysis tools
+  - numpy
+  - matplotlib
+  - pip:
+    - scikit-build-core>=0.9

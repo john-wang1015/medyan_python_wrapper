@@ -1,141 +1,184 @@
-# medyan — Python bindings for MEDYAN 5.4.0
+# MEDYAN Python Package
 
-[![MEDYAN](https://img.shields.io/badge/MEDYAN-5.4.0-blue)](http://medyan.org)
-[![Python](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org)
+Python wrapper for **MEDYAN** (Mechanochemical Dynamics of Active Networks) v5.4.0.
 
-Python wrapper for **MEDYAN** (Mechanochemical Dynamics of Active Networks),
-a simulation package for cytoskeletal filament network dynamics.
-
-The C++ backend is compiled automatically during `pip install`.
-All dependencies except HDF5 are downloaded automatically by CMake.
+`pip install .` automatically compiles the C++ simulation engine. You do **not**
+need to run cmake or make yourself.
 
 ---
 
-## Prerequisites
+## Requirements
 
-Only **HDF5** needs to be installed on your system before `pip install`:
-
-| Platform | Command |
-|----------|---------|
-| macOS    | `brew install hdf5` |
-| Ubuntu/Debian | `sudo apt install libhdf5-dev` |
-| conda (any) | `conda install -c conda-forge hdf5` |
-| HPC / module | `module load hdf5` |
-
-You also need: **Python ≥ 3.9**, **CMake ≥ 3.15**, and a **C++17 compiler**
-(GCC ≥ 7, Clang ≥ 5, or MSVC 2017+).
-
-All other C++ dependencies (Boost headers, Eigen3, fmt, spdlog, Spectra,
-xtensor, HighFive, pybind11) are fetched automatically during the build.
+- Linux or macOS (Windows support is experimental)
+- conda / mamba environment (recommended)
+- C++17-capable compiler: **GCC ≥ 9** or **Clang ≥ 10**
+- CMake ≥ 3.15
+- Python ≥ 3.8
 
 ---
 
-## Installation
+## Step 1 — Create a conda environment and install C++ dependencies
+
+All required C++ libraries are available on **conda-forge**.
 
 ```bash
-# 1. Install HDF5 (once)
-brew install hdf5          # macOS
-# sudo apt install libhdf5-dev   # Ubuntu
+# Create and activate the environment
+conda create -n medyan python=3.11
+conda activate medyan
 
-# 2. Install the Python package
-pip install git+https://github.com/john-wang1015/medyan_python_wrapper.git
+# C++ build tools
+conda install -c conda-forge cmake ninja cxx-compiler
+
+# Required C++ libraries
+conda install -c conda-forge \
+    boost-cpp \
+    eigen \
+    fmt \
+    spdlog \
+    hdf5 \
+    highfive \
+    spectra \
+    xtensor \
+    xtensor-blas \
+    catch2
 ```
 
-First install takes ~5–10 minutes (downloads and compiles deps).
-Subsequent installs reuse scikit-build-core's cache.
+> **Note for Linux users:** if `cxx-compiler` does not pull in a recent enough
+> GCC, install it explicitly: `conda install -c conda-forge gcc gxx`
 
-### Local install
+---
+
+## Step 2 — Install the Python package
 
 ```bash
-git clone https://github.com/john-wang1015/medyan_python_wrapper.git
-cd medyan_python_wrapper
+# Activate the conda environment first
+conda activate medyan
+
+# Install (compiles C++ automatically)
+cd /path/to/medyan-python
 pip install .
 ```
 
+`pip` invokes `scikit-build-core`, which runs CMake and the compiler for you.
+The compiled `medyan` binary ends up inside the Python package at
+`<site-packages>/medyan/bin/medyan`.
+
+For development / editable installs use:
+```bash
+pip install --no-build-isolation -e .
+```
+
 ---
 
-## Quick Start
+## Usage
+
+### Python API
 
 ```python
 import medyan
 
-result = medyan.run_simulation(
-    input_file = medyan.get_examples_dir() / "actin_only/systeminput.txt",
-    output_dir = "/tmp/medyan_out",
-    runtime    = 100.0,   # override RUNTIME in input file (optional)
-    seed       = 42,      # reproducible run (optional)
+# ── Run a simulation ──────────────────────────────────────────────
+medyan.run(
+    system_file="examples/actin_only/systeminput.txt",
+    output_dir="./output",
 )
 
-print(f"Filaments : {result['num_filaments']}")
-print(f"Cylinders : {result['num_cylinders']}")
-print(f"Beads     : {result['num_beads']}")
+# Fix the RNG seed for reproducibility
+medyan.run(
+    system_file="systeminput.txt",
+    input_dir="./input",
+    output_dir="./output",
+    threads=8,
+    seed=42,
+)
 
-# (x, y, z) coordinates of every bead in filament 0
-for bead in result["filament_coords"][0]:
-    print(bead)
+# ── Analyse an existing trajectory ───────────────────────────────
+medyan.analyze(
+    input_dir="./input",
+    output_dir="./output",
+)
+
+# ── Run the built-in test suite ───────────────────────────────────
+medyan.test()
+
+# ── Find the compiled binary ──────────────────────────────────────
+print(medyan.executable())
+```
+
+### Command-line (same as the native binary)
+
+After installation a `medyan` command is added to your PATH.
+All native MEDYAN arguments work unchanged:
+
+```bash
+# Run a simulation
+medyan -s systeminput.txt -i ./input -o ./output
+
+# Use multiple threads with a fixed seed
+medyan -s systeminput.txt -i ./input -o ./output -t 8 --seed-fixed 42
+
+# Analyse a trajectory
+medyan -i ./input -o ./output analyze
+
+# Run internal tests
+medyan test
+
+# Print help
+medyan --help
 ```
 
 ---
 
-## API
+## Python API reference
 
-### `medyan.run_simulation(...)`
+| Function | Description |
+|---|---|
+| `medyan.run(system_file, input_dir, output_dir, *, threads, seed)` | Run a simulation |
+| `medyan.analyze(input_dir, output_dir, *, bond_frame, frame_interval)` | Analyse a trajectory |
+| `medyan.test()` | Run MEDYAN's internal tests |
+| `medyan.config(input_file)` | Interactive configuration / normalisation |
+| `medyan.executable()` | Return `Path` to the compiled binary |
+| `medyan.version()` | Return MEDYAN version header string |
 
-```python
-medyan.run_simulation(
-    input_file:  str | Path,
-    input_dir:   str | Path | None = None,  # default: dir of input_file
-    output_dir:  str | Path | None = None,  # default: cwd
-    *,
-    runtime:     float | None = None,       # overrides RUNTIME in input file
-    seed:        int   | None = None,
-    num_threads: int          = -1,
-) -> dict
-```
-
-| Return key | Type | Description |
-|------------|------|-------------|
-| `"num_filaments"` | `int` | Filaments at end of simulation |
-| `"num_cylinders"` | `int` | Total cylinders |
-| `"num_beads"` | `int` | Total beads |
-| `"filament_coords"` | `list[list[tuple]]` | `[filament][bead] → (x, y, z)` in nm |
-
-### `medyan.read_trajectory(snapshot_file)`
-
-Pure-Python parser for MEDYAN's `snapshot.traj` output:
-
-```python
-frames = medyan.read_trajectory("/tmp/medyan_out/snapshot.traj")
-print(frames[0]["time"])                       # simulation time (float)
-print(frames[0]["filaments"][0]["beads"][0])   # (x, y, z)
-```
-
-### `medyan.get_examples_dir()`
-
-Returns a `Path` to the bundled example input files.
+All functions accept `capture_output=True` to capture stdout/stderr as strings
+instead of printing them.
 
 ---
 
-## Example Input Files
+## Troubleshooting
 
-| Directory | Description |
-|-----------|-------------|
-| `actin_only/` | Pure actin polymerisation |
-| `2filaments/` | Two-filament mechanical test |
-| `50filaments_motor_linker/` | Motors + crosslinkers |
-| `branch_actin/` | Branched actin (Arp2/3) |
-| `nucleation_actin/` | Actin nucleation |
+### `cmake` cannot find a library
 
----
+Make sure the conda environment is activated **before** running `pip install .`
+so that CMake picks up the conda-installed headers and libraries.
 
-## Notes
+If cmake still can't find a package, set the CMake prefix path explicitly:
 
-- GUI is **disabled** — no OpenGL/GLFW required.
-- Units: length = **nm**, time = **s**, force = **pN**.
-- No vcpkg required — deps are fetched by CMake directly from GitHub.
+```bash
+pip install . --config-settings="cmake.args=-DCMAKE_PREFIX_PATH=$CONDA_PREFIX"
+```
+
+### `stdc++fs` linker error (GCC < 9)
+
+Upgrade GCC: `conda install -c conda-forge gcc=12 gxx=12`
+
+### `HighFive` not found
+
+```bash
+conda install -c conda-forge highfive
+```
+
+### Compilation takes a long time
+
+Pass `-j` to use parallel compilation:
+
+```bash
+pip install . --config-settings="cmake.args=-j8"
+```
 
 ---
 
 ## License
 
-MEDYAN © 2015–2024 Papoian Lab, University of Maryland. See `license.txt`.
+See `license.txt`. MEDYAN is developed by the Papoian Laboratory, University
+of Maryland. http://www.medyan.org
