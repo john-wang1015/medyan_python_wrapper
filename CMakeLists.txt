@@ -1,93 +1,94 @@
-cmake_minimum_required(VERSION 3.15)
+cmake_minimum_required(VERSION 3.15...4.2)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Auto-bootstrap vcpkg
 #
-# Resolution order (first match wins):
-#   1. CMAKE_TOOLCHAIN_FILE already set (user/CI passed it explicitly)
-#   2. VCPKG_ROOT environment variable points to an existing vcpkg checkout
-#   3. Auto-download vcpkg into <build_dir>/_vcpkg and bootstrap it
+# CMAKE_TOOLCHAIN_FILE MUST be set before project() — we do that here.
 #
-# This means `pip install git+https://...` works with no extra setup.
+# Resolution order:
+#   1. CMAKE_TOOLCHAIN_FILE already in cache/env  → use as-is
+#   2. VCPKG_ROOT env var points to existing vcpkg → use its toolchain
+#   3. Auto-clone + bootstrap vcpkg into <build>/_vcpkg
 # ─────────────────────────────────────────────────────────────────────────────
 if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
-    if(DEFINED ENV{VCPKG_ROOT} AND EXISTS "$ENV{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake")
+    if(DEFINED ENV{VCPKG_ROOT} AND
+       EXISTS "$ENV{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake")
         set(CMAKE_TOOLCHAIN_FILE
             "$ENV{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
-            CACHE STRING "vcpkg toolchain file")
-        message(STATUS "[medyan] Using vcpkg from VCPKG_ROOT=$ENV{VCPKG_ROOT}")
+            CACHE STRING "vcpkg toolchain")
+        message(STATUS "[medyan] vcpkg from VCPKG_ROOT=$ENV{VCPKG_ROOT}")
     else()
-        set(_VCPKG_AUTO_DIR "${CMAKE_BINARY_DIR}/_vcpkg")
+        set(_VCPKG_DIR "${CMAKE_BINARY_DIR}/_vcpkg")
 
-        if(NOT EXISTS "${_VCPKG_AUTO_DIR}/bootstrap-vcpkg.sh" AND
-           NOT EXISTS "${_VCPKG_AUTO_DIR}/bootstrap-vcpkg.bat")
-            message(STATUS "[medyan] Cloning vcpkg into ${_VCPKG_AUTO_DIR} ...")
+        # Clone if not already present
+        if(NOT EXISTS "${_VCPKG_DIR}/bootstrap-vcpkg.sh" AND
+           NOT EXISTS "${_VCPKG_DIR}/bootstrap-vcpkg.bat")
+            message(STATUS "[medyan] Cloning vcpkg into ${_VCPKG_DIR} ...")
             find_package(Git REQUIRED)
             execute_process(
                 COMMAND ${GIT_EXECUTABLE} clone
                     --depth 1
-                    --branch 2024.04.26
                     https://github.com/microsoft/vcpkg.git
-                    "${_VCPKG_AUTO_DIR}"
-                RESULT_VARIABLE _VCPKG_CLONE_RESULT
+                    "${_VCPKG_DIR}"
+                RESULT_VARIABLE _CLONE_RES
             )
-            if(NOT _VCPKG_CLONE_RESULT EQUAL 0)
+            if(NOT _CLONE_RES EQUAL 0)
                 message(FATAL_ERROR
-                    "[medyan] Failed to clone vcpkg. "
-                    "Set VCPKG_ROOT to an existing vcpkg checkout and retry.")
+                    "[medyan] vcpkg clone failed. "
+                    "Set VCPKG_ROOT to an existing vcpkg and retry.")
             endif()
         endif()
 
-        if(NOT EXISTS "${_VCPKG_AUTO_DIR}/vcpkg" AND
-           NOT EXISTS "${_VCPKG_AUTO_DIR}/vcpkg.exe")
+        # Bootstrap (compile the vcpkg binary) if not already done
+        if(NOT EXISTS "${_VCPKG_DIR}/vcpkg" AND
+           NOT EXISTS "${_VCPKG_DIR}/vcpkg.exe")
             message(STATUS "[medyan] Bootstrapping vcpkg ...")
             if(WIN32)
                 execute_process(
-                    COMMAND cmd /c "${_VCPKG_AUTO_DIR}\\bootstrap-vcpkg.bat" -disableMetrics
-                    WORKING_DIRECTORY "${_VCPKG_AUTO_DIR}"
-                    RESULT_VARIABLE _VCPKG_BOOTSTRAP_RESULT
+                    COMMAND cmd /c "${_VCPKG_DIR}\\bootstrap-vcpkg.bat" -disableMetrics
+                    WORKING_DIRECTORY "${_VCPKG_DIR}"
+                    RESULT_VARIABLE _BOOT_RES
                 )
             else()
                 execute_process(
-                    COMMAND bash "${_VCPKG_AUTO_DIR}/bootstrap-vcpkg.sh" -disableMetrics
-                    WORKING_DIRECTORY "${_VCPKG_AUTO_DIR}"
-                    RESULT_VARIABLE _VCPKG_BOOTSTRAP_RESULT
+                    COMMAND bash "${_VCPKG_DIR}/bootstrap-vcpkg.sh" -disableMetrics
+                    WORKING_DIRECTORY "${_VCPKG_DIR}"
+                    RESULT_VARIABLE _BOOT_RES
                 )
             endif()
-            if(NOT _VCPKG_BOOTSTRAP_RESULT EQUAL 0)
+            if(NOT _BOOT_RES EQUAL 0)
                 message(FATAL_ERROR "[medyan] vcpkg bootstrap failed.")
             endif()
         endif()
 
         set(CMAKE_TOOLCHAIN_FILE
-            "${_VCPKG_AUTO_DIR}/scripts/buildsystems/vcpkg.cmake"
-            CACHE STRING "vcpkg toolchain file (auto-bootstrapped)")
-        message(STATUS "[medyan] vcpkg auto-bootstrapped at ${_VCPKG_AUTO_DIR}")
+            "${_VCPKG_DIR}/scripts/buildsystems/vcpkg.cmake"
+            CACHE STRING "vcpkg toolchain (auto-bootstrapped)")
+        message(STATUS "[medyan] vcpkg ready at ${_VCPKG_DIR}")
     endif()
 endif()
 
-# ── Git metadata (graceful fallback for non-git checkouts) ────────────────────
-macro(git_query _CMD _VAR _DEFAULT)
+# ── Git metadata (graceful fallback for pip-based checkouts) ──────────────────
+macro(git_query _args _var _default)
     execute_process(
-        COMMAND git ${_CMD}
+        COMMAND git ${_args}
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-        OUTPUT_VARIABLE   ${_VAR}
+        OUTPUT_VARIABLE   ${_var}
         OUTPUT_STRIP_TRAILING_WHITESPACE
-        ERROR_QUIET
-        RESULT_VARIABLE   _GIT_RES
-    )
-    if(NOT _GIT_RES EQUAL 0)
-        set(${_VAR} "${_DEFAULT}")
+        ERROR_QUIET RESULT_VARIABLE _r)
+    if(NOT _r EQUAL 0)
+        set(${_var} "${_default}")
     endif()
 endmacro()
-git_query("rev-parse --abbrev-ref HEAD" GIT_BRANCH       "unknown")
-git_query("rev-parse HEAD"              GIT_COMMIT_HASH  "unknown")
-git_query("describe --abbrev=0 --tags"  GIT_LATEST_TAG   "5.4.0")
+git_query("rev-parse --abbrev-ref HEAD" GIT_BRANCH      "unknown")
+git_query("rev-parse HEAD"              GIT_COMMIT_HASH "unknown")
+git_query("describe --abbrev=0 --tags"  GIT_LATEST_TAG  "5.4.0")
 
 if(DEFINED ENV{VCPKG_DEFAULT_TRIPLET} AND NOT DEFINED VCPKG_TARGET_TRIPLET)
     set(VCPKG_TARGET_TRIPLET "$ENV{VCPKG_DEFAULT_TRIPLET}" CACHE STRING "")
 endif()
 
+# ── Project ───────────────────────────────────────────────────────────────────
 project(medyan_python VERSION 5.4.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
@@ -152,6 +153,7 @@ if(MSVC)
     target_compile_definitions(_core PRIVATE _USE_MATH_DEFINES)
 endif()
 
+# ── External dependencies (installed by vcpkg via vcpkg.json) ─────────────────
 find_package(Boost    REQUIRED COMPONENTS)
 find_package(Eigen3   CONFIG REQUIRED)
 find_package(fmt      CONFIG REQUIRED)
