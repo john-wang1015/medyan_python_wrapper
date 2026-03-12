@@ -15,27 +15,10 @@ dependencies = []
 medyan = "medyan._cli:main"
 
 [tool.scikit-build]
-# The CMake source directory (contains CMakeLists.txt)
 cmake.source-dir = "."
-
-# Where CMake installs relative to the wheel root
+cmake.build-type = "Release"
+cmake.minimum-version = "3.15"
 wheel.install-dir = "."
 
-# Minimum CMake version
-cmake.minimum-version = "3.15"
-
-# Build type
-cmake.build-type = "Release"
-
-# Pass NO_GUI flag — the Python package always builds headless
-cmake.define.MEDYAN_NO_GUI = "true"
-
-# Exclude test sources and Visual sources from the build to keep it lean.
-# (They're already compiled in as part of the glob, but we disable the test runner.)
-
-[tool.scikit-build.cmake.args]
-# Extra cmake args can go here if needed
-
-[tool.cibuildwheel]
-# Configuration for building wheels on CI (optional)
-build = "cp38-* cp39-* cp310-* cp311-* cp312-*"
+[tool.scikit-build.cmake.define]
+MEDYAN_NO_GUI = "true"
