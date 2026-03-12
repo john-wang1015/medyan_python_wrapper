@@ -1,5 +1,11 @@
 cmake_minimum_required(VERSION 3.15)
 
+# Auto-detect conda environment
+if(DEFINED ENV{CONDA_PREFIX})
+    message(STATUS "Conda environment detected: $ENV{CONDA_PREFIX}")
+    list(PREPEND CMAKE_PREFIX_PATH "$ENV{CONDA_PREFIX}")
+endif()
+
 #######################################
 # Configurations
 #######################################
@@ -107,7 +113,11 @@ endif()
 #######################################
 
 # boost
-find_package(Boost REQUIRED COMPONENTS)
+find_package(Boost CONFIG QUIET)
+if(NOT Boost_FOUND)
+    cmake_policy(SET CMP0167 OLD)
+    find_package(Boost REQUIRED)
+endif()
 target_link_libraries(medyan PRIVATE Boost::boost)
 
 # catch2
