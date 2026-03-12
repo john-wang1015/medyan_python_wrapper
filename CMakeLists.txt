@@ -63,6 +63,11 @@ target_include_directories(medyan PUBLIC
     ${src_dir_external}
 )
 
+# Explicitly add conda includes to the target as well (belt-and-suspenders)
+if(DEFINED ENV{CONDA_PREFIX})
+    target_include_directories(medyan PRIVATE "$ENV{CONDA_PREFIX}/include")
+endif()
+
 target_compile_definitions(medyan PRIVATE
     GIT_COMMIT_HASH="5.4.0-release"
     GIT_BRANCH="main"
@@ -74,11 +79,10 @@ target_compile_definitions(medyan PRIVATE
 
     MOVEBEADSLINESEARCH
 
-    # Neighbor list algorithm — NLORIGINAL avoids umesimd which has ARM/Apple
-    # Silicon incompatibilities. The other options are:
-    #   HYBRID_NLSTENCILLIST  — intermediate approach
-    #   SIMDBINDINGSEARCH     — uses external/umesimd (broken on ARM clang)
-    NLORIGINAL
+    # HYBRID_NLSTENCILLIST: avoids umesimd (SIMDBINDINGSEARCH) which has
+    # broken ARM/Apple Silicon template specialisations, and avoids NLORIGINAL
+    # which leaves unmatched braces in HybridBindingSearchManager source files.
+    HYBRID_NLSTENCILLIST
 
     BOOST_MEM_POOL
     BOOL_POOL_NSIZE=65536
@@ -136,15 +140,22 @@ else()
 endif()
 
 # Spectra — header-only, no CMake config on conda-forge.
-# Already on include path via include_directories($CONDA_PREFIX/include) above.
+# Headers already available via target_include_directories above.
 
 # spdlog
 find_package(spdlog CONFIG REQUIRED)
 target_link_libraries(medyan PRIVATE spdlog::spdlog spdlog::spdlog_header_only)
 
-# xtensor
+# xtensor — header-only. find_package sets up the target, but we also
+# explicitly pull its INTERFACE_INCLUDE_DIRECTORIES to guarantee the headers
+# are on the include path regardless of how the CMake config propagates them.
 find_package(xtensor CONFIG REQUIRED)
 target_link_libraries(medyan PRIVATE xtensor xtensor::optimize)
+get_target_property(_xtensor_inc xtensor INTERFACE_INCLUDE_DIRECTORIES)
+if(_xtensor_inc)
+    message(STATUS "xtensor include dirs: ${_xtensor_inc}")
+    target_include_directories(medyan PRIVATE ${_xtensor_inc})
+endif()
 
 #######################################
 # Install
