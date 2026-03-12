@@ -25,9 +25,11 @@ if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
            NOT EXISTS "${_VCPKG_DIR}/bootstrap-vcpkg.bat")
             message(STATUS "[medyan] Cloning vcpkg into ${_VCPKG_DIR} ...")
             find_package(Git REQUIRED)
+            # Pin to a known-good commit that does NOT require pkg-config on macOS.
+            # This is the same commit MEDYAN's own build system uses.
+            set(_VCPKG_COMMIT "c9e786d81a890ef6b3932779925f11e696dc9541")
             execute_process(
                 COMMAND ${GIT_EXECUTABLE} clone
-                    --depth 1
                     https://github.com/microsoft/vcpkg.git
                     "${_VCPKG_DIR}"
                 RESULT_VARIABLE _CLONE_RES
@@ -36,6 +38,14 @@ if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
                 message(FATAL_ERROR
                     "[medyan] vcpkg clone failed. "
                     "Set VCPKG_ROOT to an existing vcpkg and retry.")
+            endif()
+            execute_process(
+                COMMAND ${GIT_EXECUTABLE} checkout ${_VCPKG_COMMIT}
+                WORKING_DIRECTORY "${_VCPKG_DIR}"
+                RESULT_VARIABLE _CHECKOUT_RES
+            )
+            if(NOT _CHECKOUT_RES EQUAL 0)
+                message(FATAL_ERROR "[medyan] vcpkg checkout to pinned commit failed.")
             endif()
         endif()
 
