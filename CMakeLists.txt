@@ -73,7 +73,12 @@ target_compile_definitions(medyan PRIVATE
     TRACK_UPPER_COPY_N
 
     MOVEBEADSLINESEARCH
-    SIMDBINDINGSEARCH
+
+    # Neighbor list algorithm — NLORIGINAL avoids umesimd which has ARM/Apple
+    # Silicon incompatibilities. The other options are:
+    #   HYBRID_NLSTENCILLIST  — intermediate approach
+    #   SIMDBINDINGSEARCH     — uses external/umesimd (broken on ARM clang)
+    NLORIGINAL
 
     BOOST_MEM_POOL
     BOOL_POOL_NSIZE=65536
@@ -130,9 +135,8 @@ else()
     message(FATAL_ERROR "HighFive found but no known CMake target available.")
 endif()
 
-# Spectra — header-only, no CMake config file on conda-forge.
-# Headers are already available via include_directories($CONDA_PREFIX/include) above.
-# No find_package needed.
+# Spectra — header-only, no CMake config on conda-forge.
+# Already on include path via include_directories($CONDA_PREFIX/include) above.
 
 # spdlog
 find_package(spdlog CONFIG REQUIRED)
