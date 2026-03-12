@@ -1,61 +1,31 @@
 #!/usr/bin/env bash
-# install_deps.sh
-# ─────────────────────────────────────────────────────────────────────────────
-# One-shot script that:
-#   1. Clones & bootstraps vcpkg (if not already present)
-#   2. Sets VCPKG_ROOT so scikit-build-core can find the toolchain
-#   3. Runs `pip install .` (or `pip install -e .` for editable/dev install)
-#
-# Usage:
-#   chmod +x install_deps.sh
-#   ./install_deps.sh            # normal install
-#   ./install_deps.sh --editable # editable install (development)
-#   VCPKG_ROOT=/opt/vcpkg ./install_deps.sh   # use existing vcpkg
-# ─────────────────────────────────────────────────────────────────────────────
-
+# install_deps.sh — install system prerequisite (HDF5) then pip install medyan
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-VCPKG_DEFAULT_DIR="${SCRIPT_DIR}/.vcpkg"
-EDITABLE=""
+echo "[medyan] Checking for HDF5..."
 
-for arg in "$@"; do
-    case "$arg" in
-        --editable|-e) EDITABLE="-e" ;;
-    esac
-done
-
-# ── 1. Ensure vcpkg is available ──────────────────────────────────────────────
-if [[ -z "${VCPKG_ROOT:-}" ]]; then
-    export VCPKG_ROOT="${VCPKG_DEFAULT_DIR}"
-fi
-
-if [[ ! -f "${VCPKG_ROOT}/vcpkg" && ! -f "${VCPKG_ROOT}/vcpkg.exe" ]]; then
-    echo "[medyan-install] vcpkg not found at ${VCPKG_ROOT}. Cloning..."
-    git clone https://github.com/microsoft/vcpkg.git "${VCPKG_ROOT}"
-    # Pin to a known-good commit (same one MEDYAN's own bootstrap uses)
-    (cd "${VCPKG_ROOT}" && git checkout c9e786d81a890ef6b3932779925f11e696dc9541)
-    echo "[medyan-install] Bootstrapping vcpkg..."
-    "${VCPKG_ROOT}/bootstrap-vcpkg.sh" -disableMetrics
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    if ! brew list hdf5 &>/dev/null; then
+        echo "[medyan] Installing HDF5 via Homebrew..."
+        brew install hdf5
+    else
+        echo "[medyan] HDF5 already installed."
+    fi
+elif command -v apt-get &>/dev/null; then
+    echo "[medyan] Installing HDF5 via apt..."
+    sudo apt-get install -y libhdf5-dev
+elif command -v conda &>/dev/null; then
+    echo "[medyan] Installing HDF5 via conda..."
+    conda install -y -c conda-forge hdf5
 else
-    echo "[medyan-install] Using existing vcpkg at ${VCPKG_ROOT}"
+    echo "[medyan] WARNING: cannot auto-install HDF5. Please install it manually."
+    echo "  Ubuntu: sudo apt install libhdf5-dev"
+    echo "  conda : conda install -c conda-forge hdf5"
 fi
 
-# ── 2. Export variables scikit-build-core needs ───────────────────────────────
-export CMAKE_TOOLCHAIN_FILE="${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
-export VCPKG_ROOT
-
-echo "[medyan-install] VCPKG_ROOT=${VCPKG_ROOT}"
-echo "[medyan-install] CMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}"
-
-# ── 3. Install the Python package ─────────────────────────────────────────────
-echo "[medyan-install] Running pip install..."
-pip install ${EDITABLE} "${SCRIPT_DIR}" \
-    --no-build-isolation \
-    -C cmake.define.CMAKE_TOOLCHAIN_FILE="${CMAKE_TOOLCHAIN_FILE}" \
-    -C cmake.define.MEDYAN_NO_GUI=true \
-    -v
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+echo "[medyan] Running pip install..."
+pip install "${1:-.}" "${SCRIPT_DIR}"
 
 echo ""
-echo "✓  MEDYAN Python package installed successfully."
-echo "   Test it with:  python -c \"import medyan; print(medyan.__version__)\""
+echo "✓ MEDYAN installed. Test: python -c \"import medyan; print(medyan.__version__)\""

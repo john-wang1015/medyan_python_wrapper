@@ -27,7 +27,5 @@ analysis = ["numpy>=1.21", "matplotlib>=3.5"]
 
 [tool.scikit-build]
 cmake.build-type = "Release"
-# Disable GUI so OpenGL is not required
-cmake.args = ["-DMEDYAN_NO_GUI=true"]
-# The compiled .so lands inside the medyan/ sub-package
-wheel.packages = ["medyan"]
+cmake.args       = ["-DMEDYAN_NO_GUI=true"]
+wheel.packages   = ["medyan"]
